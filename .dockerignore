@@ -1,0 +1,32 @@
+# Keep the build context small and secrets OUT of image layers (slide 19, and
+# the "no secrets in layers" rule). Anything matched here is never sent to the
+# Docker daemon and can never end up baked into the image.
+
+.git
+.github
+.gitignore
+
+# Local Python cruft
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+
+# Tests are not needed in the runtime image (they run in CI)
+tests/
+test_api.sh
+
+# Secrets / local env — MUST never enter an image
+.env
+.env.*
+!.env.example
+
+# Docs / editor files
+*.md
+.vscode/
+.idea/

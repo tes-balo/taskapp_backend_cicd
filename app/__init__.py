@@ -29,7 +29,18 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
     db.init_app(app)
-    CORS(app)
+
+    # CORS: restrict which web origins the browser may use to call this API.
+    # CORS_ORIGINS is a comma-separated allowlist, e.g.
+    #   CORS_ORIGINS=https://devops-tsacademy.com
+    # Defaults to "*" so local dev still works; SET it in production (Portainer
+    # stack env) to your frontend origin only.
+    cors_origins = os.getenv('CORS_ORIGINS', '*')
+    if cors_origins.strip() == '*':
+        CORS(app, resources={r"/api/*": {"origins": "*"}})
+    else:
+        allowed = [o.strip() for o in cors_origins.split(',') if o.strip()]
+        CORS(app, resources={r"/api/*": {"origins": allowed}})
 
     from app.routes import api_bp
     app.register_blueprint(api_bp, url_prefix='/api')

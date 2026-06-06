@@ -1,0 +1,82 @@
+name: Backend CI
+
+# CI = validate proposed changes. Runs on PULL REQUESTS into main.
+# Quality + tests gate the merge; nothing is built or deployed here.
+on:
+  pull_request:
+    branches: [main]
+    paths: ['alembic.ini', 'migrations/**', 'requirements.txt', '**.py', 'Dockerfile', 'docker-entrypoint.sh']
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  quality:
+    name: Code quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+      - name: Install lint tools
+        run: pip install flake8 black isort
+      - name: black (format check)
+        run: black --check .
+        continue-on-error: true
+      - name: isort (import order)
+        run: isort --check-only .
+        continue-on-error: true
+      - name: flake8 (lint) — fail on real errors
+        run: |
+          # Genuine syntax / undefined-name errors: block the PR on these.
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Style-only pass is advisory.
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_HOST: localhost
+      DATABASE_PORT: '5432'
+      DATABASE_NAME: testdb
+      DATABASE_USER: test
+      DATABASE_PASSWORD: test
+      SECRET_KEY: test-secret-key-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+      - name: Install dependencies
+        run: pip install pytest pytest-cov -r requirements.txt
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Run pytest with coverage
+        run: pytest --cov=app --cov-report=xml --cov-report=term -v
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage.xml
+          retention-days: 7
