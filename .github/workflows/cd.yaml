@@ -55,32 +55,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
-      - name: Checkout deploy repo
+      - name: Checkout infra repo
         uses: actions/checkout@v4
         with:
-          # GITHUB_TOKEN can't push cross-repo, so use DEPLOY_REPO_TOKEN — a
-          # PAT with contents:write on the deploy repo.
-          # Add it under repo Settings -> Secrets and variables -> Actions.
-          repository: ts-a-devops/taskapp_deploy
+          repository: tes-balo/capstone-phoenix
           token: ${{ secrets.DEPLOY_REPO_TOKEN }}
-      - name: Update BACKEND_TAG and push
+
+      - name: Bump backend image tag in manifests
         run: |
           NEW="${{ needs.build-and-push.outputs.image_tag }}"
-          sed -i "s/^BACKEND_TAG=.*/BACKEND_TAG=${NEW}/" .env
+          sed -i "s|ghcr.io/ts-a-devops/taskapp-backend:.*|ghcr.io/ts-a-devops/taskapp-backend:${NEW}|" manifests/backend-deployment.yaml
           git config user.name  "taskapp-ci[bot]"
           git config user.email "taskapp-ci@users.noreply.github.com"
-          git add .env
-          git commit -m "deploy(backend): ${NEW}" || { echo "No tag change"; exit 0; }
-          # Backend and frontend CD can race on this repo — rebase + retry.
+          git add manifests/backend-deployment.yaml
+          git commit -m "deploy(backend): bump image tag to ${NEW}" || { echo "No tag change"; exit 0; }
           for i in 1 2 3; do
             git push && break
-            echo "push rejected (concurrent deploy bump) — rebasing, attempt $i"
+            echo "push rejected — rebasing, attempt $i"
             git pull --rebase && sleep 2
           done
-      - name: Trigger Portainer redeploy (webhook)
-        env:
-          WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_URL }}
-        run: |
-          # Optional fast path: instant redeploy instead of waiting for the git
-          # webhook on the deploy repo. No-op if the secret isn't set.
-          if [ -n "$WEBHOOK" ]; then curl -fsS -X POST "$WEBHOOK" && echo "webhook fired"; else echo "PORTAINER_WEBHOOK_URL not set — relying on deploy-repo webhook"; fi
