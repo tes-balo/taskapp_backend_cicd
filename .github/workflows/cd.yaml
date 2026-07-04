@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write          # required to push to GHCR with GITHUB_TOKEN
+      # packages: write          # required to push to GHCR with GITHUB_TOKEN
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
     steps:
